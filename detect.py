@@ -17,17 +17,18 @@ for each scaling size do
  draw the boxes
 """
 
-results: map[tuple[float, int, int], bool] = {}
-window_size: int = 36
-step_size: int = 6
-scaling_sizes: list[float] = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5]
-image = Image.open("image.jpg")
-
 
 @dataclass
 class ModelResult:
     probability: float
     is_face: bool
+
+
+results: dict[tuple[float, int, int], ModelResult] = {}
+window_size: int = 36
+step_size: int = 6
+scaling_sizes: list[float] = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5]
+image = Image.open("image.jpg")
 
 
 def downscale(image, scale: float) -> ImageFile:
@@ -59,7 +60,8 @@ def merge_overlapping_boxes(
     boxes: list[tuple[int, int]],
 ) -> list[tuple[tuple[int, int], tuple[int, int]]]:
     # emil and lorenz
-    return NotImplementedError("merge_overlapping_boxes function is not implemented")
+
+    pass
 
 
 def draw_boxes(image, boxes: list[tuple[int, int]]):
