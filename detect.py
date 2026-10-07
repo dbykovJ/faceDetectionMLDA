@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from PIL import Image
+from PIL.ImageFile import ImageFile
 
 """
 hashmap of image scale and bonding box
@@ -20,7 +21,7 @@ results: map[tuple[float, int, int], bool] = {}
 window_size: int = 36
 step_size: int = 6
 scaling_sizes: list[float] = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5]
-image: Image = Image.open("image.jpg")
+image = Image.open("image.jpg")
 
 
 @dataclass
@@ -29,19 +30,21 @@ class ModelResult:
     is_face: bool
 
 
-def downscale(image, scale: float) -> Image:
+def downscale(image, scale: float) -> ImageFile:
     # dima
-    return NotImplementedError("downscale function is not implemented")
+    raise NotImplementedError("downscale function is not implemented")
 
 
 def ask_model(image, xstep: int, ystep: int, window_size: int) -> ModelResult:
     # sonny
-    return NotImplementedError("ask_model function is not implemented")
+    raise NotImplementedError("ask_model function is not implemented")
 
 
-def scale_back(results: map[tuple[float, int, int], bool], scaling_sizes: list[float]) -> list[tuple[int, int]]:
+def scale_back(
+    results: map[tuple[float, int, int], bool], scaling_sizes: list[float]
+) -> list[tuple[int, int]]:
     # dima
-    return NotImplementedError("scale_back function is not implemented")
+    raise NotImplementedError("scale_back function is not implemented")
 
 
 """"
@@ -52,7 +55,9 @@ the second tuple contains the coordinates of the bottom-right corner.
 """
 
 
-def merge_overlapping_boxes(boxes: list[tuple[int, int]]) -> list[tuple[tuple[int, int], tuple[int, int]]]:
+def merge_overlapping_boxes(
+    boxes: list[tuple[int, int]],
+) -> list[tuple[tuple[int, int], tuple[int, int]]]:
     # emil and lorenz
     return NotImplementedError("merge_overlapping_boxes function is not implemented")
 
@@ -74,4 +79,3 @@ for scale in scaling_sizes:
 original_boxes: list[tuple[int, int]] = scale_back(results, scaling_sizes)
 merged_boxes: list[tuple[int, int]] = merge_overlapping_boxes(original_boxes)
 image_with_boxes: Image = draw_boxes(image, merged_boxes)
-
