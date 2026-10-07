@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from PIL import Image
 
 """
@@ -21,12 +23,18 @@ scaling_sizes: list[float] = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5]
 image: Image = Image.open("image.jpg")
 
 
+@dataclass
+class ModelResult:
+    probability: float
+    is_face: bool
+
+
 def downscale(image, scale: float) -> Image:
     # dima
     return NotImplementedError("downscale function is not implemented")
 
 
-def ask_model(image, xstep: int, ystep: int, window_size: int) -> bool:
+def ask_model(image, xstep: int, ystep: int, window_size: int) -> ModelResult:
     # sonny
     return NotImplementedError("ask_model function is not implemented")
 
@@ -36,7 +44,15 @@ def scale_back(results: map[tuple[float, int, int], bool], scaling_sizes: list[f
     return NotImplementedError("scale_back function is not implemented")
 
 
-def merge_overlapping_boxes(boxes: list[tuple[int, int]]) -> list[tuple[int, int]]:
+""""
+Returns a list of merged bounding boxes from a list of overlapping bounding boxes.
+Each bounding box is represented as a tuple of two tuples,
+where the first tuple contains the coordinates of the top-left corner and 
+the second tuple contains the coordinates of the bottom-right corner.
+"""
+
+
+def merge_overlapping_boxes(boxes: list[tuple[int, int]]) -> list[tuple[tuple[int, int], tuple[int, int]]]:
     # emil and lorenz
     return NotImplementedError("merge_overlapping_boxes function is not implemented")
 
@@ -50,9 +66,9 @@ def draw_boxes(image, boxes: list[tuple[int, int]]):
 for scale in scaling_sizes:
     downscaled = downscale(image, scale)
 
-    for xstep in range(0, downscaled.with - window_size, step_size):
+    for xstep in range(0, downscaled.width - window_size, step_size):
         for ystep in range(0, downscaled.height - window_size, step_size):
-            is_image: bool = ask_model(downscaled, xstep, ystep, window_size)
+            is_image: ModelResult = ask_model(downscaled, xstep, ystep, window_size)
             results[(scale, xstep, ystep)] = is_image
 
 original_boxes: list[tuple[int, int]] = scale_back(results, scaling_sizes)
