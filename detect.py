@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 
+import torch
 from PIL import Image
 from PIL.ImageFile import ImageFile
+from torchvision.ops import nms
 
 """
 hashmap of image scale and bonding box
@@ -42,8 +44,8 @@ def ask_model(image, xstep: int, ystep: int, window_size: int) -> ModelResult:
 
 
 def scale_back(
-    results: map[tuple[float, int, int], bool], scaling_sizes: list[float]
-) -> list[tuple[int, int]]:
+    results: dict[tuple[float, int, int], ModelResult], scaling_sizes: list[float]
+) -> dict[tuple[tuple[int, int], tuple[int, int]], ModelResult]:
     # dima
     raise NotImplementedError("scale_back function is not implemented")
 
@@ -57,11 +59,21 @@ the second tuple contains the coordinates of the bottom-right corner.
 
 
 def merge_overlapping_boxes(
-    boxes: list[tuple[int, int]],
+    boxes: dict[tuple[tuple[int, int], tuple[int, int]], ModelResult],
 ) -> list[tuple[tuple[int, int], tuple[int, int]]]:
     # emil and lorenz
 
-    pass
+    # tensor_boxes = torch.tensor(boxes)
+    flattened = []
+    for (x1, y1), (x2, y2) in boxes:
+        flattened.append((x1, y1, x2, y2))
+
+    tensor_boxes = torch.tensor(data=flattened, dtype=torch.float32)
+    tensor_scores = torch.tensor(data=[res.probability for res in boxes.values()])
+
+    res = nms(tensor_boxes, tensor_scores, 0.5)
+    original_boxes = list(boxes)
+    return [original_boxes[i] for i in res.tolist()]
 
 
 def draw_boxes(image, boxes: list[tuple[int, int]]):
@@ -78,6 +90,9 @@ for scale in scaling_sizes:
             is_image: ModelResult = ask_model(downscaled, xstep, ystep, window_size)
             results[(scale, xstep, ystep)] = is_image
 
-original_boxes: list[tuple[int, int]] = scale_back(results, scaling_sizes)
+original_boxes: dict[tuple[tuple[int, int], tuple[int, int]], ModelResult] = scale_back(
+    results, scaling_sizes
+)
+
 merged_boxes: list[tuple[int, int]] = merge_overlapping_boxes(original_boxes)
 image_with_boxes: Image = draw_boxes(image, merged_boxes)
