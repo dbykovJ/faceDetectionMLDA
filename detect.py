@@ -1,5 +1,9 @@
 from dataclasses import dataclass
+from unittest import result
 
+import cv2
+import numpy
+import torch
 from PIL import Image
 
 """
@@ -15,23 +19,48 @@ for each scaling size do
  find overlapping boxes and merge to optimal box
  draw the boxes
 """
-
+RETINA_SIZE = 36
 results: map[tuple[float, int, int], bool] = {}
 window_size: int = 36
 step_size: int = 6
-scaling_sizes: list[float] = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5]
+scaling_sizes: list[float] = [0.8, 0.6, 0.4]
 image: Image = Image.open("image.jpg")
 
 
 @dataclass
 class ModelResult:
-    probability: float
-    is_face: bool
+    x: int
+    y: int
+    scale: float
 
 
-def downscale(image, scale: float) -> Image:
-    # dima
-    return NotImplementedError("downscale function is not implemented")
+@dataclass
+class ImageLayer:
+    image: torch.Tensor
+    scale: float
+
+@dataclass
+class BorderBox:
+    x: int
+    y: int
+    size: int = RETINA_SIZE
+
+
+def downscale(image_path, scales: list[float]) -> list[ImageLayer]:
+    target_image = cv2.imread(image_path)
+    target_image = torch.from_numpy(target_image)
+    if not target_image:
+        raise ValueError("Image not provided")
+    if not scales:
+        raise ValueError("Scales not provided")
+
+    images = [ImageLayer(target_image, 1)]
+    for scale in scales:
+        layer = cv2.resize(images[-1].image, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+        layer = torch.from_numpy(layer)
+        images.append(ImageLayer(layer, scale))
+
+    return images
 
 
 def ask_model(image, xstep: int, ystep: int, window_size: int) -> ModelResult:
@@ -39,8 +68,14 @@ def ask_model(image, xstep: int, ystep: int, window_size: int) -> ModelResult:
     return NotImplementedError("ask_model function is not implemented")
 
 
-def scale_back(results: map[tuple[float, int, int], bool], scaling_sizes: list[float]) -> list[tuple[int, int]]:
+def scale_back(results: list[ModelResult]) -> list[BorderBox]:
     # dima
+    final_boxes = []
+    for box in results:
+        x = box.x * (1/box.scale)
+        y = box.y * (1/box.scale)
+        size = RETINA_SIZE * (1/box.scale)
+        final_boxes.append(BorderBox(int(round(i))) for i in [x, y, size])
     return NotImplementedError("scale_back function is not implemented")
 
 
