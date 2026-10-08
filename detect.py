@@ -79,7 +79,7 @@ def scale_back(results: list[ModelResult]) -> list[BorderBox]:
         y = box.y * (1/box.scale)
         size = RETINA_SIZE * (1/box.scale)
         final_boxes.append(BorderBox(int(round(i))) for i in [x, y, size])
-    return NotImplementedError("scale_back function is not implemented")
+    return final_boxes
 
 
 """"
@@ -122,9 +122,7 @@ for scale in scaling_sizes:
             is_image: ModelResult = ask_model(downscaled, xstep, ystep, window_size)
             results[(scale, xstep, ystep)] = is_image
 
-original_boxes: dict[tuple[tuple[int, int], tuple[int, int]], ModelResult] = scale_back(
-    results, scaling_sizes
-)
+original_boxes: dict[tuple[tuple[int, int], tuple[int, int]], ModelResult] = scale_back(results)
 
 merged_boxes: list[tuple[int, int]] = merge_overlapping_boxes(original_boxes)
 image_with_boxes: Image = draw_boxes(image, merged_boxes)
