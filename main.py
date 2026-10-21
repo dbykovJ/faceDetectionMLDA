@@ -12,7 +12,7 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from torchmetrics import Accuracy
 import matplotlib.pyplot as plt
 from sklearn.model_selection import KFold, StratifiedKFold
-from deep_learning_project.torchsampler.imbalanced import ImbalancedDatasetSampler
+from imbalanced import ImbalancedDatasetSampler
 
 train_dir = './deep_learning_project/train_images'    # folder containing training images
 test_dir = './deep_learning_project/test_images'    # folder containing test images

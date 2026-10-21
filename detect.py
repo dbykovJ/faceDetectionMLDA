@@ -31,6 +31,7 @@ class ModelResult:
     x: int
     y: int
     scale: float
+    probability: float
 
 
 @dataclass
@@ -57,7 +58,7 @@ def downscale(image_path, scales: list[float]) -> list[ImageLayer]:
     images = [ImageLayer(target_image, 1)]
     for scale in scales:
         layer = cv2.resize(
-            images[-1].image, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA
+            images[0].image, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA
         )
         layer = torch.from_numpy(layer)
         images.append(ImageLayer(layer, scale))
@@ -77,7 +78,7 @@ def scale_back(results: list[ModelResult]) -> list[BorderBox]:
         x = box.x * (1 / box.scale)
         y = box.y * (1 / box.scale)
         size = RETINA_SIZE * (1 / box.scale)
-        final_boxes.append(BorderBox(int(round(i))) for i in [x, y, size])
+        final_boxes.append(BorderBox(int(round(i)), int(round(j))) for i, j in [x, y, size])
     return final_boxes
 
 
