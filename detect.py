@@ -1,12 +1,8 @@
 from dataclasses import dataclass
-from unittest import result
 
-import torch
 import cv2
-import numpy
 import torch
 from PIL import Image
-from PIL.ImageFile import ImageFile
 from torchvision.ops import nms
 
 """
@@ -42,6 +38,7 @@ class ImageLayer:
     image: torch.Tensor
     scale: float
 
+
 @dataclass
 class BorderBox:
     x: int
@@ -59,7 +56,9 @@ def downscale(image_path, scales: list[float]) -> list[ImageLayer]:
 
     images = [ImageLayer(target_image, 1)]
     for scale in scales:
-        layer = cv2.resize(images[-1].image, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+        layer = cv2.resize(
+            images[-1].image, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA
+        )
         layer = torch.from_numpy(layer)
         images.append(ImageLayer(layer, scale))
 
@@ -75,9 +74,9 @@ def scale_back(results: list[ModelResult]) -> list[BorderBox]:
     # dima
     final_boxes = []
     for box in results:
-        x = box.x * (1/box.scale)
-        y = box.y * (1/box.scale)
-        size = RETINA_SIZE * (1/box.scale)
+        x = box.x * (1 / box.scale)
+        y = box.y * (1 / box.scale)
+        size = RETINA_SIZE * (1 / box.scale)
         final_boxes.append(BorderBox(int(round(i))) for i in [x, y, size])
     return final_boxes
 
@@ -114,16 +113,15 @@ def draw_boxes(image, boxes: list[tuple[int, int]]):
     return NotImplementedError("draw_boxes function is not implemented")
 
 
-for scale in scaling_sizes:
-    downscaled = downscale(image, scale)
-
+for scale, downscaled in zip(scaling_sizes, downscale(image, scaling_sizes)):
     for xstep in range(0, downscaled.width - window_size, step_size):
         for ystep in range(0, downscaled.height - window_size, step_size):
             is_image: ModelResult = ask_model(downscaled, xstep, ystep, window_size)
             results[(scale, xstep, ystep)] = is_image
 
-original_boxes: dict[tuple[tuple[int, int], tuple[int, int]], ModelResult] = scale_back(results)
+original_boxes: dict[tuple[tuple[int, int], tuple[int, int]], ModelResult] = scale_back(
+    results
+)
 
 merged_boxes: list[tuple[int, int]] = merge_overlapping_boxes(original_boxes)
 image_with_boxes: Image = draw_boxes(image, merged_boxes)
-
