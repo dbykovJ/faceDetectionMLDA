@@ -1,11 +1,17 @@
-from detect_helpers import ask_model, downscale, draw_boxes, merge_overlapping_boxes, scale_back
+import torch
+from PIL import Image
+from torchvision.io import ImageReadMode, read_image
+from torchvision.transforms import functional as F
+
+from detect_helpers import (
+    ask_model,
+    downscale,
+    draw_boxes,
+    merge_overlapping_boxes,
+    scale_back,
+)
 from model import RETINA_SIZE, BorderBox, ModelResult
 from net import Net
-from PIL import Image
-from torchvision.io import read_image, ImageReadMode
-from torchvision.transforms import functional as F
-import torch
-
 
 
 def load_model(path: str) -> Net:
@@ -13,7 +19,8 @@ def load_model(path: str) -> Net:
     state = torch.load(path, map_location=torch.device("cpu"))
     model.load_state_dict(state)
     model.eval()
-    return  model
+    return model
+
 
 results: list[ModelResult] = []
 step_size: int = 6
@@ -32,12 +39,10 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 net.to(device)
 
 for downscaled in downscale(target_image, scaling_sizes):
-
     downscaled.image = downscaled.image.to(device)
-    
+
     for xstep in range(0, downscaled.width - RETINA_SIZE, step_size):
         for ystep in range(0, downscaled.height - RETINA_SIZE, step_size):
-
             result: ModelResult | None = ask_model(downscaled, xstep, ystep, net)
 
             if result is not None:
@@ -46,7 +51,9 @@ for downscaled in downscale(target_image, scaling_sizes):
 original_boxes: list[BorderBox] = scale_back(results)
 print(f"Found {len(original_boxes)} boxes before merging.")
 
-merged_boxes: list[BorderBox] = merge_overlapping_boxes(original_boxes, iou_threshold=0.5)
+merged_boxes: list[BorderBox] = merge_overlapping_boxes(
+    original_boxes, iou_threshold=0.5
+)
 
 print(f"Found {len(merged_boxes)} boxes after merging.")
 
