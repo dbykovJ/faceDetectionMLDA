@@ -1,128 +1,61 @@
-from dataclasses import dataclass
-
-import cv2
-import torch
+from detect_helpers import ask_model, downscale, draw_boxes, merge_overlapping_boxes, scale_back
+from model import RETINA_SIZE, BorderBox, ModelResult
+from net import Net
 from PIL import Image
-from torchvision.ops import nms
+from torchvision.io import read_image, ImageReadMode
+from torchvision.transforms import functional as F
+import torch
 
-"""
-hashmap of image scale and bonding box
 
-for each scaling size do
-   downscale the image
-   for each step do:
-     ask model for current window
-     remember result for window and scaling 
 
- scale back the boxes to original image size
- find overlapping boxes and merge to optimal box
- draw the boxes
-"""
-RETINA_SIZE = 36
-results: map[tuple[float, int, int], bool] = {}
-window_size: int = 36
+def load_model(path: str) -> Net:
+    model = Net()
+    state = torch.load(path, map_location=torch.device("cpu"))
+    model.load_state_dict(state)
+    model.eval()
+    return  model
+
+results: list[ModelResult] = []
 step_size: int = 6
-scaling_sizes: list[float] = [0.8, 0.6, 0.4]
-image: Image = Image.open("image.jpg")
+scaling_sizes: list[float] = [0.5, 0.4, 0.3, 0.2, 0.1]
+image_path = "image.jpeg"
 
 
-@dataclass
-class ModelResult:
-    x: int
-    y: int
-    scale: float
-    probability: float
+net = load_model("Net.pt")
+target_image = read_image(image_path, mode=ImageReadMode.RGB)
+target_image = F.rgb_to_grayscale(target_image, num_output_channels=1)
+target_image = F.convert_image_dtype(target_image, torch.float32)
+target_image = F.normalize(target_image, mean=[0.5], std=[0.5])
 
 
-@dataclass
-class ImageLayer:
-    image: torch.Tensor
-    scale: float
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+net.to(device)
 
+for downscaled in downscale(target_image, scaling_sizes):
 
-@dataclass
-class BorderBox:
-    x: int
-    y: int
-    size: int = RETINA_SIZE
+    downscaled.image = downscaled.image.to(device)
+    
+    for xstep in range(0, downscaled.width - RETINA_SIZE, step_size):
+        for ystep in range(0, downscaled.height - RETINA_SIZE, step_size):
 
+            result: ModelResult | None = ask_model(downscaled, xstep, ystep, net)
 
-def downscale(image_path, scales: list[float]) -> list[ImageLayer]:
-    target_image = cv2.imread(image_path)
-    target_image = torch.from_numpy(target_image)
-    if not target_image:
-        raise ValueError("Image not provided")
-    if not scales:
-        raise ValueError("Scales not provided")
+            if result is not None:
+                results.append(result)
 
-    images = [ImageLayer(target_image, 1)]
-    for scale in scales:
-        layer = cv2.resize(
-            images[0].image, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA
-        )
-        layer = torch.from_numpy(layer)
-        images.append(ImageLayer(layer, scale))
+original_boxes: list[BorderBox] = scale_back(results)
+print(f"Found {len(original_boxes)} boxes before merging.")
 
-    return images
+merged_boxes: list[BorderBox] = merge_overlapping_boxes(original_boxes, iou_threshold=0.5)
 
+print(f"Found {len(merged_boxes)} boxes after merging.")
 
-def ask_model(image, xstep: int, ystep: int, window_size: int) -> ModelResult:
-    # sonny
-    raise NotImplementedError("ask_model function is not implemented")
+merged_boxes = [box for box in merged_boxes if box.certainity > 0.8]
 
+print(f"Found {len(merged_boxes)} boxes with certainity > 0.8 after filtering.")
 
-def scale_back(results: list[ModelResult]) -> list[BorderBox]:
-    # dima
-    final_boxes = []
-    for box in results:
-        x = box.x * (1 / box.scale)
-        y = box.y * (1 / box.scale)
-        size = RETINA_SIZE * (1 / box.scale)
-        final_boxes.append(BorderBox(int(round(i)), int(round(j))) for i, j in [x, y, size])
-    return final_boxes
+out_image = Image.open(image_path)
 
+final_image = draw_boxes(out_image, merged_boxes)
 
-""""
-Returns a list of merged bounding boxes from a list of overlapping bounding boxes.
-Each bounding box is represented as a tuple of two tuples,
-where the first tuple contains the coordinates of the top-left corner and 
-the second tuple contains the coordinates of the bottom-right corner.
-"""
-
-
-def merge_overlapping_boxes(
-    boxes: dict[tuple[tuple[int, int], tuple[int, int]], ModelResult],
-) -> list[tuple[tuple[int, int], tuple[int, int]]]:
-    # emil and lorenz
-
-    # tensor_boxes = torch.tensor(boxes)
-    flattened = []
-    for (x1, y1), (x2, y2) in boxes:
-        flattened.append((x1, y1, x2, y2))
-
-    tensor_boxes = torch.tensor(data=flattened, dtype=torch.float32)
-    tensor_scores = torch.tensor(data=[res.probability for res in boxes.values()])
-
-    res = nms(tensor_boxes, tensor_scores, 0.5)
-    original_boxes = list(boxes)
-    return [original_boxes[i] for i in res.tolist()]
-
-
-def draw_boxes(image, boxes: list[tuple[int, int]]):
-    # santiago
-
-    return NotImplementedError("draw_boxes function is not implemented")
-
-
-for scale, downscaled in zip(scaling_sizes, downscale(image, scaling_sizes)):
-    for xstep in range(0, downscaled.width - window_size, step_size):
-        for ystep in range(0, downscaled.height - window_size, step_size):
-            is_image: ModelResult = ask_model(downscaled, xstep, ystep, window_size)
-            results[(scale, xstep, ystep)] = is_image
-
-original_boxes: dict[tuple[tuple[int, int], tuple[int, int]], ModelResult] = scale_back(
-    results
-)
-
-merged_boxes: list[tuple[int, int]] = merge_overlapping_boxes(original_boxes)
-image_with_boxes: Image = draw_boxes(image, merged_boxes)
+final_image.save("output_image.jpg")
