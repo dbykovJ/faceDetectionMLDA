@@ -1,5 +1,6 @@
 # %% Import
 import torch
+import torchvision
 from PIL import Image
 from torchvision.io import ImageReadMode, read_image
 from torchvision.transforms import functional as F
@@ -29,7 +30,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 net.to(device)
 
 # %% Load Image
-image_path = "image.jpeg"
+image_name = "image"
+
+image_path = f"{image_name}.jpg"
 input_max_side = 1024
 target_image = read_image(image_path, mode=ImageReadMode.RGB)
 target_image = F.rgb_to_grayscale(target_image, num_output_channels=1)
