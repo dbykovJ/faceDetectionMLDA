@@ -30,7 +30,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 net.to(device)
 
 # %% Load Image
-image_name = "image"
+image_name = "weird_glasses"
 
 image_path = f"{image_name}.jpg"
 input_max_side = 1024
@@ -46,8 +46,8 @@ target_image = F.normalize(target_image, mean=[0.5], std=[0.5])
 # %% Detect faces
 results: list[ModelResult] = []
 step_size: int = 6
-batch_size: int = 256
-scaling_sizes: list[float] = [0.6, 0.4, 0.2, 0.1]
+batch_size: int = 250
+scaling_sizes: list[float] = [0.5, 0.4, 0.2, 0.1]
 
 for downscaled in downscale(target_image, scaling_sizes):
     downscaled.image = downscaled.image.to(device)
@@ -70,7 +70,7 @@ out_image = Image.open(image_path).resize(
 
 original_boxes: list[BorderBox] = scale_back(results)
 print(f"Found {len(original_boxes)} boxes before merging.")
-certainity_filter = 0.95
+certainity_filter = 0.92
 original_certain = [box for box in original_boxes if box.certainity > certainity_filter]
 print(f"Found {len(original_certain)} boxes after merging.")
 
@@ -88,7 +88,7 @@ def filter_by_support(boxes, min_neighbors=2, iou_thresh=0.2):
     return [b for b, c in zip(boxes, counts.tolist()) if c >= min_neighbors]
 
 
-boxes_by_support = filter_by_support(original_certain)
+boxes_by_support = filter_by_support(original_certain, min_neighbors=2, iou_thresh=0.2)
 
 merged_boxes: list[BorderBox] = merge_overlapping_boxes(
     boxes_by_support, iou_threshold=0.1
