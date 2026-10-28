@@ -88,7 +88,7 @@ def filter_by_support(boxes, min_neighbors=2, iou_thresh=0.2):
     return [b for b, c in zip(boxes, counts.tolist()) if c >= min_neighbors]
 
 
-boxes_by_support = filter_by_support(original_certain)
+boxes_by_support = filter_by_support(original_certain, min_neighbors=2, iou_thresh=0.2)
 
 merged_boxes: list[BorderBox] = merge_overlapping_boxes(
     boxes_by_support, iou_threshold=0.1
