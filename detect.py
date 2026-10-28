@@ -65,9 +65,12 @@ merged_boxes: list[BorderBox] = merge_overlapping_boxes(
 
 print(f"Found {len(merged_boxes)} boxes after merging.")
 
-merged_boxes = [box for box in merged_boxes if box.certainity > 0.85]
+certainity_filter = 0.95
+merged_boxes = [box for box in merged_boxes if box.certainity > certainity_filter]
 
-print(f"Found {len(merged_boxes)} boxes with certainty > 0.8 after filtering.")
+print(
+    f"Found {len(merged_boxes)} boxes with certainty > {certainity_filter} after filtering."
+)
 
 
 # %% Visualize and save
