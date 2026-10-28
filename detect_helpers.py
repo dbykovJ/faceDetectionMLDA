@@ -11,17 +11,17 @@ from net import Net
 def downscale(target_image: torch.Tensor, scales: list[float]) -> list[ImageLayer]:
 
     height, width = target_image.size(dim=1), target_image.size(dim=2)
-    images = [ImageLayer(target_image, 1, width, height)]
+    images = [ImageLayer(target_image, 1, height, width)]
     for scale in scales:
-        output_height = max(1, int(round(height * scale)))
-        output_width = max(1, int(round(width * scale)))
+        output_height = max(1, round(height * scale))
+        output_width = max(1, round(width * scale))
         layer = F.resize(
             images[0].image,
             size=[output_height, output_width],
             antialias=True,
         )
-        width, height = layer.size(dim=1), layer.size(dim=2)
-        images.append(ImageLayer(layer, scale, height, width))
+        layer_height, layer_width = layer.size(dim=1), layer.size(dim=2)
+        images.append(ImageLayer(layer, scale, layer_height, layer_width))
 
     return images
 
