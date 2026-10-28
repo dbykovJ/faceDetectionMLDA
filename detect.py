@@ -100,3 +100,15 @@ net = load_model("Net.pt")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 net.to(device)
 
+images = Path("./images")
+out = Path("out")
+
+(images / out).mkdir(exist_ok=True)
+
+for img_path in Path(images).iterdir():
+    print(f"Detecting faces in {img_path.name}")
+    if img_path.is_dir():
+        continue
+    detected = detect_faces(img_path, net)
+
+    detected.save(images / out / img_path.with_stem(img_path.stem + "_out").name)
