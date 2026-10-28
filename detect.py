@@ -46,19 +46,20 @@ target_image = F.normalize(target_image, mean=[0.5], std=[0.5])
 # %% Detect faces
 results: list[ModelResult] = []
 step_size: int = 6
-scaling_sizes: list[float] = [0.8, 0.6, 0.4, 0.2]
+scaling_sizes: list[float] = [0.6, 0.4, 0.2, 0.1]
 
 for downscaled in downscale(target_image, scaling_sizes):
     downscaled.image = downscaled.image.to(device)
+    scaled_step = max(1, round(step_size * downscaled.scale))
 
-    for xstep in range(0, downscaled.width - RETINA_SIZE, step_size):
-        for ystep in range(0, downscaled.height - RETINA_SIZE, step_size):
+    for xstep in range(0, downscaled.width - RETINA_SIZE + 1, scaled_step):
+        for ystep in range(0, downscaled.height - RETINA_SIZE + 1, scaled_step):
             result: ModelResult | None = ask_model(downscaled, xstep, ystep, net)
 
             if result is not None:
                 results.append(result)
 
-# %% post process
+# %% post processcaled_step
 out_image = Image.open(image_path).resize(
     (input_size[1], input_size[0]), resample=Image.Resampling.LANCZOS
 )
