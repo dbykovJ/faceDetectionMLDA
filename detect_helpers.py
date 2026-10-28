@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw
 from torchvision.ops import nms
-from torchvision.transforms import functional as F
+from torchvision.transforms import functional as F, transforms
 
 from model import RETINA_SIZE, BorderBox, ImageLayer, ModelResult
 from net import Net
@@ -22,6 +22,9 @@ def downscale(target_image: torch.Tensor, scales: list[float]) -> list[ImageLaye
         )
         layer_height, layer_width = layer.size(dim=1), layer.size(dim=2)
         images.append(ImageLayer(layer, scale, layer_height, layer_width))
+
+
+    del images[0]
 
     return images
 
@@ -58,14 +61,13 @@ def ask_model_batch(
             for x, y in positions
         ]
     )
-    probs = torch.softmax(model(patches), dim=1).cpu()
-    probabilities, predictions = probs.max(dim=1)
+    logits = model(patches).cpu()
+    scores = logits[:, 1] - logits[:, 0]
+
     return [
-        ModelResult(x, y, image.scale, probability)
-        for (x, y), probability, prediction in zip(
-            positions, probabilities.tolist(), predictions.tolist()
-        )
-        if prediction == 1
+        ModelResult(x, y, image.scale, score)
+        for (x, y), score in zip(positions, scores.tolist())
+        if score > 0  # same as predicting "face"
     ]
 
 
