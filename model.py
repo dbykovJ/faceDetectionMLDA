@@ -4,20 +4,21 @@ import torch
 
 RETINA_SIZE = 36
 
+
 @dataclass
 class ModelResult:
     x: int
     y: int
     scale: float
-    probability: float # that it is a face
+    probability: float  # that it is a face
 
 
 @dataclass
 class ImageLayer:
     image: torch.Tensor
     scale: float
-    width: int
     height: int
+    width: int
 
 
 @dataclass

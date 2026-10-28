@@ -10,7 +10,7 @@ from net import Net
 
 def downscale(target_image: torch.Tensor, scales: list[float]) -> list[ImageLayer]:
 
-    width, height = target_image.size(dim=1), target_image.size(dim=2)
+    height, width = target_image.size(dim=1), target_image.size(dim=2)
     images = [ImageLayer(target_image, 1, width, height)]
     for scale in scales:
         output_height = max(1, int(round(height * scale)))
@@ -21,7 +21,7 @@ def downscale(target_image: torch.Tensor, scales: list[float]) -> list[ImageLaye
             antialias=True,
         )
         width, height = layer.size(dim=1), layer.size(dim=2)
-        images.append(ImageLayer(layer, scale, width, height))
+        images.append(ImageLayer(layer, scale, height, width))
 
     return images
 
@@ -31,7 +31,7 @@ def ask_model(
 ) -> ModelResult | None:
 
     image_slice = image.image[
-        :, xstep : xstep + RETINA_SIZE, ystep : ystep + RETINA_SIZE
+        :, ystep : ystep + RETINA_SIZE, xstep : xstep + RETINA_SIZE
     ]
 
     outputs = model(image_slice)
