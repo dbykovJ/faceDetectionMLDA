@@ -47,7 +47,16 @@ def detect_faces(image_path: Path, net: Net):
     results: list[ModelResult] = []
     step_size: int = 6
     batch_size: int = 250
-scaling_sizes: list[float] = [0.5, 0.4, 0.32, 0.256, 0.2048, 0.16384, 0.131072, 0.1048576]
+    scaling_sizes: list[float] = [
+        0.5,
+        0.4,
+        0.32,
+        0.256,
+        0.2048,
+        0.16384,
+        0.131072,
+        0.1048576,
+    ]
 
     for downscaled in downscale(target_image, scaling_sizes):
         downscaled.image = downscaled.image.to(device)
