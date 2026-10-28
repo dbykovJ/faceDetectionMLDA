@@ -1,3 +1,4 @@
+# %% Import
 import torch
 from PIL import Image
 from torchvision.io import ImageReadMode, read_image
@@ -14,6 +15,7 @@ from model import RETINA_SIZE, BorderBox, ModelResult
 from net import Net
 
 
+# %% Load Model
 def load_model(path: str) -> Net:
     model = Net()
     state = torch.load(path, map_location=torch.device("cpu"))
@@ -22,21 +24,21 @@ def load_model(path: str) -> Net:
     return model
 
 
-results: list[ModelResult] = []
-step_size: int = 6
-scaling_sizes: list[float] = [0.5, 0.4, 0.3, 0.2, 0.1]
-image_path = "image.jpeg"
-
-
 net = load_model("Net.pt")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+net.to(device)
+
+# %% Load Image
+image_path = "image.jpeg"
 target_image = read_image(image_path, mode=ImageReadMode.RGB)
 target_image = F.rgb_to_grayscale(target_image, num_output_channels=1)
 target_image = F.convert_image_dtype(target_image, torch.float32)
 target_image = F.normalize(target_image, mean=[0.5], std=[0.5])
 
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-net.to(device)
+# %% Detect faces
+results: list[ModelResult] = []
+step_size: int = 6
+scaling_sizes: list[float] = [0.5, 0.4, 0.3, 0.2, 0.1, 0.09, 0.08]
 
 for downscaled in downscale(target_image, scaling_sizes):
     downscaled.image = downscaled.image.to(device)
@@ -48,19 +50,22 @@ for downscaled in downscale(target_image, scaling_sizes):
             if result is not None:
                 results.append(result)
 
+# %% post process
 original_boxes: list[BorderBox] = scale_back(results)
 print(f"Found {len(original_boxes)} boxes before merging.")
 
 merged_boxes: list[BorderBox] = merge_overlapping_boxes(
-    original_boxes, iou_threshold=0.5
+    original_boxes, iou_threshold=0.1
 )
 
 print(f"Found {len(merged_boxes)} boxes after merging.")
 
-merged_boxes = [box for box in merged_boxes if box.certainity > 0.8]
+merged_boxes = [box for box in merged_boxes if box.certainity > 0.85]
 
-print(f"Found {len(merged_boxes)} boxes with certainity > 0.8 after filtering.")
+print(f"Found {len(merged_boxes)} boxes with certainty > 0.8 after filtering.")
 
+
+# %% Visualize and save
 out_image = Image.open(image_path)
 
 final_image = draw_boxes(out_image, merged_boxes)
