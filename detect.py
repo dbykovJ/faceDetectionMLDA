@@ -43,7 +43,7 @@ target_image = F.normalize(target_image, mean=[0.5], std=[0.5])
 # %% Detect faces
 results: list[ModelResult] = []
 step_size: int = 6
-scaling_sizes: list[float] = [0.5, 0.4, 0.3, 0.2, 0.1, 0.09, 0.08]
+scaling_sizes: list[float] = [0.8, 0.6, 0.4, 0.2]
 
 for downscaled in downscale(target_image, scaling_sizes):
     downscaled.image = downscaled.image.to(device)
