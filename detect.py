@@ -30,9 +30,14 @@ net.to(device)
 
 # %% Load Image
 image_path = "image.jpeg"
+input_max_side = 1024
 target_image = read_image(image_path, mode=ImageReadMode.RGB)
 target_image = F.rgb_to_grayscale(target_image, num_output_channels=1)
 target_image = F.convert_image_dtype(target_image, torch.float32)
+height, width = target_image.shape[-2:]
+input_scale = input_max_side / max(height, width)
+input_size = [max(1, round(height * input_scale)), max(1, round(width * input_scale))]
+target_image = F.resize(target_image, input_size, antialias=True)
 target_image = F.normalize(target_image, mean=[0.5], std=[0.5])
 
 # %% Detect faces
@@ -66,7 +71,9 @@ print(f"Found {len(merged_boxes)} boxes with certainty > 0.8 after filtering.")
 
 
 # %% Visualize and save
-out_image = Image.open(image_path)
+out_image = Image.open(image_path).resize(
+    (input_size[1], input_size[0]), resample=Image.Resampling.LANCZOS
+)
 
 final_image = draw_boxes(out_image, merged_boxes)
 
