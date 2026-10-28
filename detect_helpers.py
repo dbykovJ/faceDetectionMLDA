@@ -45,6 +45,30 @@ def ask_model(
     )
 
 
+@torch.inference_mode()
+def ask_model_batch(
+    image: ImageLayer, positions: list[tuple[int, int]], model: Net
+) -> list[ModelResult]:
+    if not positions:
+        return []
+
+    patches = torch.stack(
+        [
+            image.image[:, y : y + RETINA_SIZE, x : x + RETINA_SIZE]
+            for x, y in positions
+        ]
+    )
+    probs = torch.softmax(model(patches), dim=1).cpu()
+    probabilities, predictions = probs.max(dim=1)
+    return [
+        ModelResult(x, y, image.scale, probability)
+        for (x, y), probability, prediction in zip(
+            positions, probabilities.tolist(), predictions.tolist()
+        )
+        if prediction == 1
+    ]
+
+
 def scale_back(results: list[ModelResult]) -> list[BorderBox]:
     # dima
     final_boxes = []
