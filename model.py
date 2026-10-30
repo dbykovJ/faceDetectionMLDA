@@ -25,5 +25,5 @@ class ImageLayer:
 class BorderBox:
     x: int
     y: int
-    certainity: float
+    certainty: float
     size: int

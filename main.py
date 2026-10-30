@@ -127,8 +127,8 @@ class CNNMid(nn.Module):
         self.drouput = nn.Dropout(0.2)
         self.pool = nn.AdaptiveAvgPool2d(1)
 
-        self.fc1 = nn.Linear(64*9*9, 64)
-        self.fc2 = nn.Linear(64, 2)
+        self.fc1 = nn.Linear(64, 16)
+        self.fc2 = nn.Linear(16, 2)
 
 
     def forward(self, x):
@@ -136,8 +136,8 @@ class CNNMid(nn.Module):
         x = self.maxpool(self.act(self.batchnorm2(self.conv2(x))))
         x = self.act(self.batchnorm3(self.conv3(x)))
         x = self.maxpool(self.act(self.batchnorm4(self.conv4(x))))
-        # x = self.pool(x)
-        x = x.reshape(x.shape[0], -1)
+        x = self.pool(x)
+        x = x.flatten(x, 1)
         x = self.drouput(x)
         x = self.act(self.fc1(x))
         x = self.fc2(x)
@@ -383,7 +383,7 @@ if __name__ == '__main__':
 
     # models = [[CNNLow, 'CNN_low'], [CNNMid, 'CNN_mid'], [CNNHigh, 'CNN_high']]
 
-    models = [[CNNMid, 'CNN_Mid_1'], [Net, 'Net']]
+    models = [[CNNMid, 'CNN_Mid_1']]
     for model in models:
         main(model[0], model[1])
 

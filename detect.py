@@ -10,7 +10,7 @@ from detect_helpers import (
     downscale,
     draw_boxes,
     merge_overlapping_boxes,
-    scale_back,
+    scale_back, filter_by_support,
 )
 from model import RETINA_SIZE, BorderBox, ModelResult
 from net import Net
@@ -25,12 +25,12 @@ def load_model(path: str) -> Net:
     return model
 
 
-net = load_model("Net.pt")
+net = load_model("FCNet.pt")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 net.to(device)
 
 # %% Load Image
-image_name = "image"
+image_name = "image3"
 
 image_path = f"{image_name}.jpg"
 input_max_side = 1024
@@ -70,8 +70,8 @@ out_image = Image.open(image_path).resize(
 
 original_boxes: list[BorderBox] = scale_back(results)
 print(f"Found {len(original_boxes)} boxes before merging.")
-certainity_filter = 7.0
-original_certain = [box for box in original_boxes if box.certainity > certainity_filter]
+certainty_filter = 4.0
+original_certain = [box for box in original_boxes if box.certainty > certainty_filter]
 print(f"Found {len(original_certain)} boxes after merging.")
 
 
@@ -79,23 +79,14 @@ image_raw_filtered = draw_boxes(out_image, original_certain)
 image_raw_filtered.save(f"{image_name}_raw_out.jpg")
 
 
-def filter_by_support(boxes, min_neighbors=2, iou_thresh=0.2):
-    t = torch.tensor(
-        [[b.x, b.y, b.x + b.size, b.y + b.size] for b in boxes], dtype=torch.float32
-    )
-    iou = torchvision.ops.box_iou(t, t)
-    counts = (iou > iou_thresh).sum(dim=1) - 1  # exclude self
-    return [b for b, c in zip(boxes, counts.tolist()) if c >= min_neighbors]
-
-
-boxes_by_support = filter_by_support(original_certain, min_neighbors=2, iou_thresh=0.2)
+boxes_by_support = filter_by_support(original_certain, certainty_filter=certainty_filter, min_neighbors=2, iou_thresh=0.2)
 
 merged_boxes: list[BorderBox] = merge_overlapping_boxes(
     boxes_by_support, iou_threshold=0.1
 )
 
 print(
-    f"Found {len(merged_boxes)} boxes with certainty > {certainity_filter} after filtering."
+    f"Found {len(merged_boxes)} boxes with certainty > {certainty_filter} after filtering."
 )
 
 # %% Visualize and save

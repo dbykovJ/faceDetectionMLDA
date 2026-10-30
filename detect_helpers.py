@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torchvision
 from PIL import Image, ImageDraw
 from torchvision.ops import nms
 from torchvision.transforms import functional as F, transforms
@@ -50,7 +51,7 @@ def ask_model(
 
 @torch.inference_mode()
 def ask_model_batch(
-    image: ImageLayer, positions: list[tuple[int, int]], model: Net
+    image: ImageLayer, positions: list[tuple[int, int]], model: Net, min_logit: float = 0.0
 ) -> list[ModelResult]:
     if not positions:
         return []
@@ -61,14 +62,24 @@ def ask_model_batch(
             for x, y in positions
         ]
     )
-    logits = model(patches).cpu()
-    scores = logits[:, 1] - logits[:, 0]
+    logits = model(patches).flatten().cpu()  # (N,1,1,1) -> (N,)
+    scores = logits  # a single logit is already the face score
 
     return [
         ModelResult(x, y, image.scale, score)
         for (x, y), score in zip(positions, scores.tolist())
-        if score > 0  # same as predicting "face"
+        if score > min_logit
     ]
+
+
+def filter_by_support(boxes, certainty_filter: float, min_neighbors=2, iou_thresh=0.2):
+    t = torch.tensor(
+        [[b.x, b.y, b.x + b.size, b.y + b.size] for b in boxes], dtype=torch.float32
+    )
+    iou = torchvision.ops.box_iou(t, t)
+    counts = (iou > iou_thresh).sum(dim=1) - 1  # exclude self
+    return [b for b, c in zip(boxes, counts.tolist()) if
+            b.certainty >= certainty_filter and c >= min_neighbors]
 
 
 def scale_back(results: list[ModelResult]) -> list[BorderBox]:
@@ -107,7 +118,7 @@ def merge_overlapping_boxes(
 
     tensor_boxes = torch.tensor(data=flattened, dtype=torch.float32)
     tensor_scores = torch.tensor(
-        data=[box.certainity for box in boxes], dtype=torch.float32
+        data=[box.certainty for box in boxes], dtype=torch.float32
     )
 
     res = nms(tensor_boxes, tensor_scores, iou_threshold)
