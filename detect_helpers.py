@@ -3,7 +3,7 @@ import torch
 import torchvision
 from PIL import Image, ImageDraw
 from torchvision.ops import nms
-from torchvision.transforms import functional as F, transforms
+from torchvision.transforms import functional as F
 
 from model import RETINA_SIZE, BorderBox, ImageLayer, ModelResult
 from net import Net
@@ -23,7 +23,6 @@ def downscale(target_image: torch.Tensor, scales: list[float]) -> list[ImageLaye
         )
         layer_height, layer_width = layer.size(dim=1), layer.size(dim=2)
         images.append(ImageLayer(layer, scale, layer_height, layer_width))
-
 
     del images[0]
 
@@ -57,10 +56,7 @@ def ask_model_batch(
         return []
 
     patches = torch.stack(
-        [
-            image.image[:, y : y + RETINA_SIZE, x : x + RETINA_SIZE]
-            for x, y in positions
-        ]
+        [image.image[:, y : y + RETINA_SIZE, x : x + RETINA_SIZE] for x, y in positions]
     )
     logits = model(patches).flatten().cpu()  # (N,1,1,1) -> (N,)
     scores = logits  # a single logit is already the face score
