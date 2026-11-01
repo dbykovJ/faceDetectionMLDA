@@ -79,7 +79,7 @@ def detect_faces(image_path: Path, net: Net):
     original_boxes: list[BorderBox] = scale_back(results)
 
 
-    certainty_filter = 2.0
+    certainty_filter = 0.0
 
     boxes_by_support = filter_by_support(original_boxes, certainty_filter=certainty_filter, min_neighbors=2, iou_thresh=0.2)
 
@@ -96,7 +96,7 @@ def detect_faces(image_path: Path, net: Net):
     return draw_boxes(out_image, merged_boxes)
 
 
-net = load_model("Net.pt")
+net = load_model("FCNet.pt")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 net.to(device)
 
@@ -105,10 +105,19 @@ out = Path("out")
 
 (images / out).mkdir(exist_ok=True)
 
+exts = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+
 for img_path in Path(images).iterdir():
     print(f"Detecting faces in {img_path.name}")
-    if img_path.is_dir():
+    if img_path.is_dir() or img_path.suffix.lower() not in exts:
         continue
     detected = detect_faces(img_path, net)
 
     detected.save(images / out / img_path.with_stem(img_path.stem + "_out").name)
+
+
+# TODO - recreate images predicted from the plain sliding window approach (without knn filtering) {also show the boxes
+# before merging overlapping boxes}, then with knn filtering, then show the results of 3 different models
+# also show different scaling sizes combinations
+# show the certainty filter tuning
+# both of these are shown on the simple model

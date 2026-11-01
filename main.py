@@ -11,7 +11,7 @@ from tqdm import tqdm
 from torch.utils.data.sampler import SubsetRandomSampler
 from torchmetrics import Accuracy
 import matplotlib.pyplot as plt
-from sklearn.model_selection import KFold, StratifiedKFold
+from sklearn.model_selection import StratifiedKFold
 from imbalanced import ImbalancedDatasetSampler
 
 train_dir = './deep_learning_project/train_images'    # folder containing training images
@@ -242,7 +242,7 @@ def show_confusion_matrix(model, loader, device):
     ax.set_ylabel('true')
     for i in range(2):
         for j in range(2):
-            ax.text(j, i, cm[i, j].item(), ha='center', va='center',
+            ax.text(j, i, str(cm[i, j].item()), ha='center', va='center',
                     color='white' if cm[i, j] > cm.max() / 2 else 'black')
     plt.tight_layout()
     plt.show()
