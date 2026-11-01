@@ -13,10 +13,17 @@ from net import Net
 train_dir = "./deep_learning_project/train_images"  # folder containing training images
 test_dir = "./deep_learning_project/test_images"  # folder containing test images
 
+transform_basic = transforms.Compose(
+    [
+        transforms.Grayscale(),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=(0.5), std=(0.5)),
+    ]
+)
+
 transform = transforms.Compose(
     [
-        transforms.Grayscale(),  # transforms to gray-scale (1 input channel)
-        # additional transforms
+        transform_basic,
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomAffine(
             degrees=10,
@@ -26,24 +33,15 @@ transform = transforms.Compose(
             fill=128,
         ),
         transforms.ColorJitter(brightness=0.2, contrast=0.2),
-        transforms.ToTensor(),  # transforms to Torch tensor (needed for PyTorch)
-        transforms.Normalize(mean=(0.5,), std=(0.5,)),
     ]
 )  # subtracts mean (0.5) and devides by standard deviation (0.5) -> resulting values in (-1, +1)
 
-eval_transform = transforms.Compose(
-    [
-        transforms.Grayscale(),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=(0.5,), std=(0.5,)),
-    ]
-)
 
 # Define two pytorch datasets (train/test)
 train_data = torchvision.datasets.ImageFolder(train_dir, transform=transform)
 
-valid_data = torchvision.datasets.ImageFolder(train_dir, transform=eval_transform)
-test_data = torchvision.datasets.ImageFolder(test_dir, transform=eval_transform)
+valid_data = torchvision.datasets.ImageFolder(train_dir, transform=transform_basic)
+test_data = torchvision.datasets.ImageFolder(test_dir, transform=transform_basic)
 
 valid_size = 0.2  # proportion of validation set (80% train, 20% validation)
 batch_size = 32
@@ -78,7 +76,7 @@ classes = (
 # Training
 
 
-def train(model_class, device, num_epochs=10):
+def train(model_class, device, train_loader, num_epochs=10):
 
     print("\n===== Start Training Phase =====")
 
@@ -129,7 +127,7 @@ def test(model, device):
     )
 
 
-def main(model_class, name):
+def setup_device():
     if torch.cuda.is_available():
         device = torch.device("cuda")
     elif hasattr(torch, "xpu") and torch.xpu.is_available():
@@ -137,20 +135,42 @@ def main(model_class, name):
     else:
         device = torch.device("cpu")
     print(f"Using device: {device}")
+    return device
 
-    num_epochs = 10
 
-    # cross_validate(model_class, device, num_epochs=num_epochs)
+num_epochs = 10
 
-    model = train(model_class, device, num_epochs=num_epochs)
+
+def train_net_simple():
+    train_data = torchvision.datasets.ImageFolder(train_dir, transform=transform_basic)
+    train_loader = torch.utils.data.DataLoader(
+        train_data, batch_size=batch_size, sampler=train_sampler, num_workers=1
+    )
+    device = setup_device()
+
+    model = train(Net, device, train_loader, num_epochs=num_epochs)
 
     test(model, device)
 
-    # show_confusion_matrix(model, test_loader, device)
-    # show_errors(model, test_loader, device)
+    torch.save(model.state_dict(), "./" + "Net" + ".pt")
 
-    torch.save(model.state_dict(), "./" + name + ".pt")
+
+def train_net_additional_transforms():
+    train_data = torchvision.datasets.ImageFolder(train_dir, transform=transform)
+    train_loader = torch.utils.data.DataLoader(
+        train_data, batch_size=batch_size, sampler=train_sampler, num_workers=1
+    )
+    device = setup_device()
+
+    model = train(Net, device, train_loader, num_epochs=num_epochs)
+
+    test(model, device)
+
+    torch.save(model.state_dict(), "./" + "Net_transforms" + ".pt")
 
 
 if __name__ == "__main__":
-    main(Net, "Net")
+    print("Training simple Net...")
+    # train_net_simple()
+    print("Training Net with transforms")
+    train_net_additional_transforms()

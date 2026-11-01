@@ -6,10 +6,12 @@ from torchvision.ops import nms
 from torchvision.transforms import functional as F
 
 from model import RETINA_SIZE, BorderBox, ImageLayer, ModelResult
-from net import Net
+from net import FCNet
 
 
-def downscale(target_image: torch.Tensor, scales: list[float]) -> list[ImageLayer]:
+def downscale(
+    target_image: torch.Tensor, scales: tuple[float, ...]
+) -> list[ImageLayer]:
 
     height, width = target_image.size(dim=1), target_image.size(dim=2)
     images = [ImageLayer(target_image, 1, height, width)]
@@ -30,7 +32,7 @@ def downscale(target_image: torch.Tensor, scales: list[float]) -> list[ImageLaye
 
 
 def ask_model(
-    image: ImageLayer, xstep: int, ystep: int, model: Net
+    image: ImageLayer, xstep: int, ystep: int, model: FCNet
 ) -> ModelResult | None:
 
     image_slice = image.image[
@@ -50,7 +52,10 @@ def ask_model(
 
 @torch.inference_mode()
 def ask_model_batch(
-    image: ImageLayer, positions: list[tuple[int, int]], model: Net, min_logit: float = 0.0
+    image: ImageLayer,
+    positions: list[tuple[int, int]],
+    model: torch.nn.Module,
+    min_logit: float = 0.0,
 ) -> list[ModelResult]:
     if not positions:
         return []
@@ -69,13 +74,18 @@ def ask_model_batch(
 
 
 def filter_by_support(boxes, certainty_filter: float, min_neighbors=2, iou_thresh=0.2):
+    if not boxes:
+        return []
     t = torch.tensor(
         [[b.x, b.y, b.x + b.size, b.y + b.size] for b in boxes], dtype=torch.float32
     )
     iou = torchvision.ops.box_iou(t, t)
     counts = (iou > iou_thresh).sum(dim=1) - 1  # exclude self
-    return [b for b, c in zip(boxes, counts.tolist()) if
-            b.certainty >= certainty_filter and c >= min_neighbors]
+    return [
+        b
+        for b, c in zip(boxes, counts.tolist())
+        if b.certainty >= certainty_filter and c >= min_neighbors
+    ]
 
 
 def scale_back(results: list[ModelResult]) -> list[BorderBox]:
@@ -84,11 +94,9 @@ def scale_back(results: list[ModelResult]) -> list[BorderBox]:
     for res in results:
         x = res.x * (1 / res.scale)
         y = res.y * (1 / res.scale)
-        size = int(round(RETINA_SIZE * (1 / res.scale)))
+        size = round(RETINA_SIZE * (1 / res.scale))
 
-        final_boxes.append(
-            BorderBox(int(round(x)), int(round(y)), res.probability, size)
-        )
+        final_boxes.append(BorderBox(round(x), round(y), res.probability, size))
     return final_boxes
 
 

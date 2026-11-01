@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 
@@ -12,22 +13,25 @@ def conv_bn(in_ch, out_ch, k=3, p=1):
 
 class ResBlock(nn.Module):
     """Two 3x3 convs with a skip connection (same channels)."""
+
     def __init__(self, ch):
         super().__init__()
         self.c1 = conv_bn(ch, ch)
-        self.c2 = nn.Sequential(nn.Conv2d(ch, ch, 3, padding=1, bias=False),
-                                nn.BatchNorm2d(ch))
+        self.c2 = nn.Sequential(
+            nn.Conv2d(ch, ch, 3, padding=1, bias=False), nn.BatchNorm2d(ch)
+        )
         self.act = nn.ReLU(inplace=True)
 
     def forward(self, x):
         return self.act(x + self.c2(self.c1(x)))
 
 
-class Net(nn.Module):
+class FCNet(nn.Module):
     """
     Fully convolutional face detector.
     - Trained on 36x36 crops -> output is 1x1 (one logit).
     """
+
     def __init__(self):
         super().__init__()
         # Stage 1: full resolution (36x36)
@@ -39,10 +43,18 @@ class Net(nn.Module):
 
         self.pool = nn.MaxPool2d(2, 2)
 
-        self.lat1 = nn.Sequential(nn.Conv2d(16, 16, 1, bias=False), nn.BatchNorm2d(16),
-                                  nn.ReLU(inplace=True), nn.AvgPool2d(4, 4))
-        self.lat2 = nn.Sequential(nn.Conv2d(32, 16, 1, bias=False), nn.BatchNorm2d(16),
-                                  nn.ReLU(inplace=True), nn.AvgPool2d(2, 2))
+        self.lat1 = nn.Sequential(
+            nn.Conv2d(16, 16, 1, bias=False),
+            nn.BatchNorm2d(16),
+            nn.ReLU(inplace=True),
+            nn.AvgPool2d(4, 4),
+        )
+        self.lat2 = nn.Sequential(
+            nn.Conv2d(32, 16, 1, bias=False),
+            nn.BatchNorm2d(16),
+            nn.ReLU(inplace=True),
+            nn.AvgPool2d(2, 2),
+        )
 
         fused = 64 + 16 + 16
         self.reduce = conv_bn(fused, 48, k=1, p=0)
@@ -55,13 +67,13 @@ class Net(nn.Module):
             nn.ReLU(inplace=True),
             nn.Dropout2d(0.2),
         )
-        self.cls = nn.Conv2d(64, 1, 1) # face logit as an output
-                                                                        # (negative = not face, positive = face)
+        self.cls = nn.Conv2d(64, 1, 1)  # face logit as an output
+        # (negative = not face, positive = face)
 
     def forward(self, x):
-        x1 = self.s1(x)                    # 36x36
-        x2 = self.s2(self.pool(x1))        # 18x18
-        x3 = self.s3(self.pool(x2))        # 9x9
+        x1 = self.s1(x)  # 36x36
+        x2 = self.s2(self.pool(x1))  # 18x18
+        x3 = self.s3(self.pool(x2))  # 9x9
 
         lat_conn1 = self.lat1(x1)
         lat_conn2 = self.lat2(x2)
@@ -73,3 +85,22 @@ class Net(nn.Module):
         logit = self.cls(window)
         return logit
 
+
+class Net(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Conv2d(1, 6, 5)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(6, 16, 5)
+        self.fc1 = nn.Linear(16 * 6 * 6, 32)
+        self.fc2 = nn.Linear(32, 16)
+        self.fc3 = nn.Linear(16, 2)
+
+    def forward(self, x):
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = x.view(-1, 16 * 6 * 6)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
