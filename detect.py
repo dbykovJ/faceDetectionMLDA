@@ -14,16 +14,7 @@ from detect_helpers import (
     scale_back, filter_by_support,
 )
 from model import RETINA_SIZE, BorderBox, ModelResult
-from net import Net
-
-
-# %% Load Model
-def load_model(path: str) -> Net:
-    model = Net()
-    state = torch.load(path, map_location=torch.device("cpu"))
-    model.load_state_dict(state)
-    model.eval()
-    return model
+from net import Net, load_model
 
 
 # %% Load Image
@@ -77,7 +68,6 @@ def detect_faces(image_path: Path, net: Net):
     )
 
     original_boxes: list[BorderBox] = scale_back(results)
-
 
     certainty_filter = 0.0
 

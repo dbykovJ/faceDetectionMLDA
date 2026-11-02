@@ -73,3 +73,11 @@ class Net(nn.Module):
         logit = self.cls(window)
         return logit
 
+
+# %% Load Model
+def load_model(path: str) -> Net:
+    model = Net()
+    state = torch.load(path, map_location=torch.device("cpu"))
+    model.load_state_dict(state)
+    model.eval()
+    return model
