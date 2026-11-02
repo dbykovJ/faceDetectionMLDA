@@ -25,7 +25,8 @@ from tqdm import tqdm
 from imbalanced import ImbalancedDatasetSampler
 
 def cross_validate(model_class, device,
-                   train_dir, transformations, hard_negative_dir=None,
+                   train_dir, transformations,
+                   model_name, out_dir, hard_negative_dir=None,
                    num_epochs=10, k_folds=3, batch_size=32):
     train_tf, test_tf = get_transforms(transformations)
     aug_data = build_train_data(train_dir, hard_negative_dir, train_tf)    # for training
@@ -33,10 +34,12 @@ def cross_validate(model_class, device,
     labels = np.array(aug_data.targets)
 
     skf = StratifiedKFold(n_splits=k_folds, shuffle=True, random_state=42)
-    fold_results = []
+    fold_results, history = [], []
 
     for fold, (tr_ids, val_ids) in enumerate(skf.split(np.zeros(len(labels)), labels)):
         print(f"\n===== Fold {fold + 1}/{k_folds} =====")
+
+        fold_hist = []
 
         sampler = ImbalancedDatasetSampler(
             aug_data, indices=tr_ids.tolist(),
@@ -66,16 +69,26 @@ def cross_validate(model_class, device,
             thr = best_threshold(p, yv)
             m = metrics_at(p, yv, thr)
             m['train_loss'] = running / len(train_loader)
+            m['thr'] = thr
+            m['epoch'] = epoch + 1
+            fold_hist.append(dict(m))
             print(f"  epoch {epoch + 1}: train_loss={m['train_loss']:.4f} thr={thr:.2f} "
                   f"P={m['precision']:.3f} R={m['recall']:.3f} "
                   f"F1={m['f1']:.3f} PR-AUC={m['pr_auc']:.4f}")
 
+        history.append(fold_hist)
         fold_results.append(m)  # last epoch, so no best-epoch selection bias
 
+    summary = {}
     print("\n===== Cross-validation summary (mean ± std over folds) =====")
     for key in ['precision', 'recall', 'f1', 'pr_auc']:
         vals = [r[key] for r in fold_results]
+        summary[key] = {'mean': float(np.mean(vals)), 'std': float(np.std(vals))}
         print(f"{key:>10}: {np.mean(vals):.4f} ± {np.std(vals):.4f}")
+
+    save_json({'k_folds': k_folds, 'num_epochs': num_epochs,
+               'summary': summary, 'folds': fold_results, 'history': history},
+              model_name, 'cv', out_dir)
     return fold_results
 
 def train(model_class, device, train_loader, test_val_loader, num_epochs = 10):
@@ -120,15 +133,18 @@ def train(model_class, device, train_loader, test_val_loader, num_epochs = 10):
     return model, best_thr
 
 def test(model, device, test_loader, threshold=0.5):
-    acc = Accuracy(task="binary").to(device)
     model.eval()
+    correct, total = 0, 0
     with torch.no_grad():
         for images, labels in test_loader:
             images, labels = images.to(device), labels.to(device)
-            probs = torch.sigmoid(to_logit(model(images).flatten())).cpu()
+            probs = torch.sigmoid(to_logit(model(images)))
             preds = (probs >= threshold).long()
-            acc.update(preds, labels)
-    print(f"Test accuracy @ thr={threshold:.2f}: {acc.compute().item():.4f}")
+            correct += (preds == labels).sum().item()
+            total += labels.numel()
+    acc = correct / total
+    print(f"Test accuracy @ thr={threshold:.2f}: {acc:.4f}")
+    return acc
 
 
 def parse_args():
@@ -163,7 +179,7 @@ def main():
 
     args = parse_args()
 
-    model_name = args.model_class
+    model_name = args.name
     model_class = resolve_name(args.model_file + ':' + args.model_class)
 
     train_loader, test_val_loader, test_final_loader = prep_data(
@@ -174,8 +190,8 @@ def main():
     )
 
     if args.cross_validate:
-        cross_validate(model_class, device, args.train_folder, args.transformations,
-                       args.hard_negatives_folder, num_epochs=num_epochs)
+        cross_validate(model_class, device, args.train_folder, args.transformations,model_name=model_name,
+                       hard_negative_dir=args.hard_negatives_folder, num_epochs=num_epochs, out_dir='./')
 
     model, threshold = train(model_class = model_class, device = device,
                   train_loader = train_loader, test_val_loader = test_val_loader,
@@ -185,6 +201,10 @@ def main():
 
     show_confusion_matrix(model=model, loader=test_final_loader, device=device, threshold=threshold, classes=classes)
     show_errors(model=model, loader=test_final_loader, device=device, threshold=threshold, classes=classes)
+    plot_pr_curve(model, test_final_loader, device, model_name, threshold=threshold)
+    plot_roc_curve(model, test_final_loader, device, model_name, threshold=threshold)
+
+
 
     torch.save(model.state_dict(), "./" + model_name + ".pt")
 

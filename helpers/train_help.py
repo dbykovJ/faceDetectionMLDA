@@ -8,9 +8,10 @@ from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.utils.data import ConcatDataset, DataLoader, Subset
 from torchvision import transforms
-
+from pathlib import Path
 from imbalanced import ImbalancedDatasetSampler
-
+from sklearn.metrics import roc_curve
+import json
 
 def get_transforms(transformations):
     test_tf = transforms.Compose([
@@ -81,7 +82,7 @@ def get_probs(model, loader, device):
     model.eval()
     ps, ys = [], []
     for x, y in loader:
-        ps.append(torch.sigmoid(to_logit(model(x.to(device)).flatten())).cpu())
+        ps.append(torch.sigmoid(to_logit(model(x.to(device)))).cpu())
         ys.append(y)
     return torch.cat(ps).numpy(), torch.cat(ys).numpy()
 
@@ -99,23 +100,24 @@ def best_threshold(p, y):
     f1s = 2 * prec[:-1] * rec[:-1] / (prec[:-1] + rec[:-1] + 1e-9)
     return float(thr[f1s.argmax()])
 
-def evaluate(model, loader, criterion, device):
+def evaluate(model, loader, criterion, device, threshold=0.5):
     model.eval()
     probs, ys, total_loss, n = [], [], 0.0, 0
     with torch.no_grad():
         for x, y in loader:
             x, y = x.to(device), y.to(device)
-            out = to_logit(model(x).flatten())                       # (N,1,1,1) -> (N,)
+            out = to_logit(model(x))                       # (N,1,1,1) -> (N,)
             total_loss += criterion(out, y.float()).item() * y.size(0)
             n += y.size(0)
             probs.append(torch.sigmoid(out).cpu())         # sigmoid, not softmax
             ys.append(y.cpu())
     p = torch.cat(probs).numpy()
     y = torch.cat(ys).numpy()
-    pred = (p > 0.5).astype(int)
+    pred = (p >= threshold).astype(int)
     prec, rec, f1, _ = precision_recall_fscore_support(
         y, pred, average='binary', zero_division=0)
     return {
+        'threshold': threshold,
         'loss': total_loss / n,
         'acc': float((pred == y).mean()),
         'bal_acc': balanced_accuracy_score(y, pred),
@@ -133,7 +135,7 @@ def show_errors(model, loader, device, threshold, classes, n=16):
     wrong = []
     with torch.no_grad():
         for images, labels in loader:
-            p_face = torch.sigmoid(to_logit(model(images.to(device)).flatten())).cpu()
+            p_face = torch.sigmoid(to_logit(model(images.to(device)))).cpu()
             preds = (p_face >= threshold).long()
             probs = torch.stack([1 - p_face, p_face], dim=1)
             for i in (preds != labels).nonzero().flatten():
@@ -180,3 +182,67 @@ def show_confusion_matrix(model, loader, device, threshold, classes):
 
 
 
+
+def plot_pr_curve(model, loader, device, model_name, threshold=None, out_dir='.'):
+    p, y = get_probs(model, loader, device)
+    prec, rec, _ = precision_recall_curve(y, p)
+    ap = average_precision_score(y, p)
+
+    fig, ax = plt.subplots(figsize=(5, 5))
+    ax.plot(rec, prec, label=f'PR curve (AP = {ap:.4f})')
+    ax.axhline(y.mean(), ls='--', color='gray', label=f'baseline = {y.mean():.2f}')
+    if threshold is not None:
+        m = metrics_at(p, y, threshold)
+        ax.scatter([m['recall']], [m['precision']], color='red', zorder=3,
+                   label=f'thr = {threshold:.2f}')
+    ax.set_xlabel('Recall')
+    ax.set_ylabel('Precision')
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1.05)
+    ax.set_title(f'Precision-Recall curve: {model_name}')
+    ax.legend(loc='lower left')
+    plt.tight_layout()
+
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+    plt.savefig(Path(out_dir) / f'{model_name}_pr_curve.png')
+    plt.show()
+
+
+def plot_roc_curve(model, loader, device, model_name, threshold=None, out_dir='.'):
+    p, y = get_probs(model, loader, device)
+    fpr, tpr, _ = roc_curve(y, p)
+    auc = roc_auc_score(y, p)
+
+    fig, ax = plt.subplots(figsize=(5, 5))
+    ax.plot(fpr, tpr, label=f'ROC curve (AUC = {auc:.4f})')
+    ax.plot([0, 1], [0, 1], ls='--', color='gray', label='chance')
+    if threshold is not None:
+        pred = (p >= threshold).astype(int)
+        tpr_t = ((pred == 1) & (y == 1)).sum() / max((y == 1).sum(), 1)
+        fpr_t = ((pred == 1) & (y == 0)).sum() / max((y == 0).sum(), 1)
+        ax.scatter([fpr_t], [tpr_t], color='red', zorder=3, label=f'thr = {threshold:.2f}')
+    ax.set_xlabel('False positive rate')
+    ax.set_ylabel('True positive rate')
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1.05)
+    ax.set_title(f'ROC curve: {model_name}')
+    ax.legend(loc='lower right')
+    plt.tight_layout()
+
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+    plt.savefig(Path(out_dir) / f'{model_name}_roc_curve.png')
+    plt.show()
+
+def save_json(obj, model_name, suffix, out_dir='.'):
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+    path = Path(out_dir) / f'{model_name}_{suffix}.json'
+    with open(path, 'w') as f:
+        json.dump(obj, f, indent=2, default=float)   # default=float handles numpy scalars
+    return path
+
+
+def save_evaluation(model, loader, device, model_name, threshold, out_dir='.'):
+    res = evaluate(model, loader, nn.BCEWithLogitsLoss(), device, threshold)
+    path = save_json(res, model_name, 'evaluation', out_dir)
+    print(f'Saved evaluation to {path}')
+    return res
