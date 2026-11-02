@@ -10,6 +10,7 @@
         -te, --test-folder: path to test folder
         -hn, --hard-negatives-folder: path to hard negatives folder (optional)
         -cv, --cross-validate: perform cross-validation (optional)
+        -t, --transformations: perform more complex transformations (optional)
 """
 
 
@@ -23,9 +24,10 @@ from torchmetrics import Accuracy
 from tqdm import tqdm
 from imbalanced import ImbalancedDatasetSampler
 
-def cross_validate(model_class, device, train_dir, hard_negative_dir=None,
+def cross_validate(model_class, device,
+                   train_dir, transformations, hard_negative_dir=None,
                    num_epochs=10, k_folds=3, batch_size=32):
-    train_tf, test_tf = get_transforms()
+    train_tf, test_tf = get_transforms(transformations)
     aug_data = build_train_data(train_dir, hard_negative_dir, train_tf)    # for training
     clean_data = build_train_data(train_dir, hard_negative_dir, test_tf)   # for validation
     labels = np.array(aug_data.targets)
@@ -53,7 +55,7 @@ def cross_validate(model_class, device, train_dir, hard_negative_dir=None,
             running = 0.0
             for data, y in tqdm(train_loader, desc=f"Fold {fold + 1} Epoch {epoch + 1}"):
                 data, y = data.to(device), y.to(device)
-                loss = criterion(model(data).flatten(), y.float())
+                loss = criterion(to_logit(model(data)), y.float())
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -91,7 +93,7 @@ def train(model_class, device, train_loader, test_val_loader, num_epochs = 10):
 
         for data, targets in tqdm(train_loader, desc=f"Epoch {epoch + 1}"):
             data, targets = data.to(device), targets.to(device)
-            loss = criterion(model(data).flatten(), targets.float())
+            loss = criterion(to_logit(model(data)), targets.float())
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -123,7 +125,7 @@ def test(model, device, test_loader, threshold=0.5):
     with torch.no_grad():
         for images, labels in test_loader:
             images, labels = images.to(device), labels.to(device)
-            probs = torch.sigmoid(model(images)).flatten()
+            probs = torch.sigmoid(to_logit(model(images).flatten())).cpu()
             preds = (probs >= threshold).long()
             acc.update(preds, labels)
     print(f"Test accuracy @ thr={threshold:.2f}: {acc.compute().item():.4f}")
@@ -138,6 +140,7 @@ def parse_args():
     ap.add_argument("-te", "--test-folder", required=True, help="path to test folder")
     ap.add_argument("-hn", "--hard-negatives-folder", required=False, help="path to hard negatives folder")
     ap.add_argument("-cv", "--cross-validate", action="store_true", help="perform cross-validation")
+    ap.add_argument("-t", "--transformations", action="store_true", help="perform more complex transformations" )
 
     return ap.parse_args()
 
@@ -166,11 +169,13 @@ def main():
     train_loader, test_val_loader, test_final_loader = prep_data(
         train_dir=args.train_folder,
         test_dir=args.test_folder,
-        hard_negative_dir=args.hard_negatives_folder
+        hard_negative_dir=args.hard_negatives_folder,
+        transformations=args.transformations,
     )
 
     if args.cross_validate:
-        cross_validate(model_class, device, args.train_folder, args.hard_negatives_folder, num_epochs=num_epochs)
+        cross_validate(model_class, device, args.train_folder, args.transformations,
+                       args.hard_negatives_folder, num_epochs=num_epochs)
 
     model, threshold = train(model_class = model_class, device = device,
                   train_loader = train_loader, test_val_loader = test_val_loader,

@@ -12,7 +12,7 @@ from torchvision import transforms
 from imbalanced import ImbalancedDatasetSampler
 
 
-def get_transforms():
+def get_transforms(transformations):
     test_tf = transforms.Compose([
         transforms.Grayscale(),
         transforms.ToTensor(),
@@ -28,6 +28,8 @@ def get_transforms():
         transforms.ToTensor(),
         transforms.Normalize((0.5,), (0.5,)),
     ])
+    if not transformations:
+        return test_tf, test_tf
     return train_tf, test_tf
 
 def build_train_data(train_dir, hard_negative_dir, tf):
@@ -44,8 +46,8 @@ def build_train_data(train_dir, hard_negative_dir, tf):
     data.targets = base.targets + hard.targets
     return data
 
-def prep_data(train_dir: str, test_dir: str, hard_negative_dir: str | None = None):
-    train_tf, test_tf = get_transforms()
+def prep_data(train_dir: str, test_dir: str, transformations, hard_negative_dir: str | None = None):
+    train_tf, test_tf = get_transforms(transformations)
     train_data= build_train_data(train_dir, hard_negative_dir, train_tf)
     train_targets = train_data.targets
 
@@ -65,13 +67,21 @@ def prep_data(train_dir: str, test_dir: str, hard_negative_dir: str | None = Non
 
     return train_loader, test_val_loader, test_final_loader
 
+def to_logit(out):
+    """Any model output -> one logit per sample, shape (N,)."""
+    if out.dim() == 1:                 # already (N,)
+        return out
+    out = out.flatten(1)               # (N,1,1,1) -> (N,1) ; (N,2) stays (N,2)
+    if out.shape[1] == 2:              # 2-class head: logit of "face" vs "noface"
+        return out[:, 1] - out[:, 0]
+    return out.squeeze(1)              # 1-logit head
 
 @torch.no_grad()
 def get_probs(model, loader, device):
     model.eval()
     ps, ys = [], []
     for x, y in loader:
-        ps.append(torch.sigmoid(model(x.to(device)).flatten()).cpu())
+        ps.append(torch.sigmoid(to_logit(model(x.to(device)).flatten())).cpu())
         ys.append(y)
     return torch.cat(ps).numpy(), torch.cat(ys).numpy()
 
@@ -95,7 +105,7 @@ def evaluate(model, loader, criterion, device):
     with torch.no_grad():
         for x, y in loader:
             x, y = x.to(device), y.to(device)
-            out = model(x).flatten()                       # (N,1,1,1) -> (N,)
+            out = to_logit(model(x).flatten())                       # (N,1,1,1) -> (N,)
             total_loss += criterion(out, y.float()).item() * y.size(0)
             n += y.size(0)
             probs.append(torch.sigmoid(out).cpu())         # sigmoid, not softmax
@@ -123,7 +133,7 @@ def show_errors(model, loader, device, threshold, classes, n=16):
     wrong = []
     with torch.no_grad():
         for images, labels in loader:
-            p_face = torch.sigmoid(model(images.to(device)).flatten()).cpu()
+            p_face = torch.sigmoid(to_logit(model(images.to(device)).flatten())).cpu()
             preds = (p_face >= threshold).long()
             probs = torch.stack([1 - p_face, p_face], dim=1)
             for i in (preds != labels).nonzero().flatten():
