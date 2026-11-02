@@ -23,7 +23,7 @@ transform_basic = transforms.Compose(
 
 transform = transforms.Compose(
     [
-        transform_basic,
+        transforms.Grayscale(),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomAffine(
             degrees=10,
@@ -33,8 +33,10 @@ transform = transforms.Compose(
             fill=128,
         ),
         transforms.ColorJitter(brightness=0.2, contrast=0.2),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=(0.5,), std=(0.5,)),
     ]
-)  # subtracts mean (0.5) and devides by standard deviation (0.5) -> resulting values in (-1, +1)
+)
 
 
 # Define two pytorch datasets (train/test)

@@ -63,8 +63,13 @@ def ask_model_batch(
     patches = torch.stack(
         [image.image[:, y : y + RETINA_SIZE, x : x + RETINA_SIZE] for x, y in positions]
     )
-    logits = model(patches).flatten().cpu()  # (N,1,1,1) -> (N,)
-    scores = logits  # a single logit is already the face score
+    outputs = model(patches)
+    scores = (
+        outputs[:, 1]
+        if outputs.ndim == 2 and outputs.shape[1] == 2
+        else outputs.flatten()
+    )
+    scores = scores.cpu()
 
     return [
         ModelResult(x, y, image.scale, score)
