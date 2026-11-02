@@ -1,43 +1,26 @@
-# %% Import
+from __future__ import annotations
+
 from pathlib import Path
 
 import torch
 from PIL import Image
-from torchvision.io import ImageReadMode, read_image
 from torchvision.transforms import functional as F
 
 from detect_helpers import (
     ask_model_batch,
     downscale,
     draw_boxes,
+    filter_by_support,
     merge_overlapping_boxes,
-    scale_back, filter_by_support,
+    scale_back,
 )
 from model import RETINA_SIZE, BorderBox, ModelResult
 from net import Net, load_model
 
 
-# %% Load Image
-def detect_faces(image_path: Path, net: Net):
 
-    input_max_side = 1024
-    target_image = read_image(str(image_path), mode=ImageReadMode.RGB)
-    target_image = F.rgb_to_grayscale(target_image, num_output_channels=1)
-    target_image = F.convert_image_dtype(target_image, torch.float32)
-    height, width = target_image.shape[-2:]
-    input_scale = input_max_side / max(height, width)
-    input_size = [
-        max(1, round(height * input_scale)),
-        max(1, round(width * input_scale)),
-    ]
-    target_image = F.resize(target_image, input_size, antialias=True)
-    target_image = F.normalize(target_image, mean=[0.5], std=[0.5])
-
-    # %% Detect faces
-    results: list[ModelResult] = []
-    step_size: int = 6
-    batch_size: int = 250
-    scaling_sizes: list[float] = [
+class Detect:
+    DEFAULT_SCALING_SIZES: tuple[float, ...] = (
         0.5,
         0.4,
         0.32,
@@ -46,64 +29,80 @@ def detect_faces(image_path: Path, net: Net):
         0.16384,
         0.131072,
         0.1048576,
-    ]
-
-    for downscaled in downscale(target_image, scaling_sizes):
-        downscaled.image = downscaled.image.to(device)
-        scaled_step = max(1, round(step_size * downscaled.scale))
-        positions: list[tuple[int, int]] = []
-
-        for xstep in range(0, downscaled.width - RETINA_SIZE + 1, scaled_step):
-            for ystep in range(0, downscaled.height - RETINA_SIZE + 1, scaled_step):
-                positions.append((xstep, ystep))
-                if len(positions) == batch_size:
-                    results.extend(ask_model_batch(downscaled, positions, net))
-                    positions.clear()
-
-        results.extend(ask_model_batch(downscaled, positions, net))
-
-    # %% post processcaled_step
-    out_image = Image.open(image_path).resize(
-        (input_size[1], input_size[0]), resample=Image.Resampling.LANCZOS
     )
+    DEFAULT_STEP = 6
+    DEFAULT_SIZE = 1024
+    DEFAULT_CERTAINTY = 0.95
+    DEFAULT_KNN = 2
 
-    original_boxes: list[BorderBox] = scale_back(results)
+    def __init__(
+        self,
+        net: torch.nn.Module,
+        input_max_side: int = DEFAULT_SIZE,
+        step_size: int = DEFAULT_STEP,
+        scaling_sizes: tuple[float, ...] = DEFAULT_SCALING_SIZES,
+        certainty_filter: float = DEFAULT_CERTAINTY,
+        knn: int = DEFAULT_KNN,
+    ):
+        self.input_max_side = input_max_side
+        self.step_size = step_size
+        self.scaling_sizes = scaling_sizes
+        self.certainty_filter = certainty_filter
+        self.net = net
 
-    certainty_filter = 0.0
+    def _resize_image(self, image: Image.Image):
+        scale = self.input_max_side / max(image.height, image.width)
+        return image.resize(
+            (
+                max(1, round(image.width * scale)),
+                max(1, round(image.height * scale)),
+            ),
+            resample=Image.Resampling.LANCZOS,
+        )
 
-    boxes_by_support = filter_by_support(original_boxes, certainty_filter=certainty_filter, min_neighbors=2, iou_thresh=0.2)
+    def _to_normalized_tensor(self, image: Image.Image):
+        target_image = F.to_tensor(image)
+        target_image = F.rgb_to_grayscale(target_image, num_output_channels=1)
+        target_image = F.convert_image_dtype(target_image, torch.float32)
+        target_image = F.normalize(target_image, mean=[0.5], std=[0.5])
+        return target_image
 
-    merged_boxes: list[BorderBox] = merge_overlapping_boxes(
-        boxes_by_support, iou_threshold=0.1
-    )
+    def detect_faces(self, image_path: Path, batch_size=250):
 
-    print(
-        f"Found {len(merged_boxes)} boxes with certainty > {certainty_filter} after filtering."
-    )
+        img = Image.open(image_path)
+        img = self._resize_image(img)
 
-    # %% Visualize and save
+        img_tensor = self._to_normalized_tensor(img)
 
-    return draw_boxes(out_image, merged_boxes)
+        results: list[ModelResult] = []
+        for downscaled in downscale(img_tensor, self.scaling_sizes):
+            downscaled.image = downscaled.image.to(next(self.net.parameters()).device)
+            scaled_step = max(1, round(self.step_size * downscaled.scale))
+            positions: list[tuple[int, int]] = []
 
+            for xstep in range(0, downscaled.width - RETINA_SIZE + 1, scaled_step):
+                for ystep in range(0, downscaled.height - RETINA_SIZE + 1, scaled_step):
+                    positions.append((xstep, ystep))
+                    if len(positions) == batch_size:
+                        results.extend(ask_model_batch(downscaled, positions, self.net))
+                        positions.clear()
 
-net = load_model("FCNet.pt")
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-net.to(device)
+            results.extend(ask_model_batch(downscaled, positions, self.net))
 
-images = Path("./images")
-out = Path("out")
+        boxes: list[BorderBox] = scale_back(results)
 
-(images / out).mkdir(exist_ok=True)
+        boxes_by_support = filter_by_support(
+            boxes,
+            certainty_filter=self.certainty_filter,
+            min_neighbors=2,
+            iou_thresh=0.2,
+        )
 
-exts = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+        merged_boxes: list[BorderBox] = merge_overlapping_boxes(
+            boxes_by_support, iou_threshold=0.1
+        )
 
-for img_path in Path(images).iterdir():
-    print(f"Detecting faces in {img_path.name}")
-    if img_path.is_dir() or img_path.suffix.lower() not in exts:
-        continue
-    detected = detect_faces(img_path, net)
-
-    detected.save(images / out / img_path.with_stem(img_path.stem + "_out").name)
+        return draw_boxes(img, merged_boxes)
 
 
 # TODO - recreate images predicted from the plain sliding window approach (without knn filtering) {also show the boxes

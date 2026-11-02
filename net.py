@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 
@@ -23,7 +24,7 @@ class ResBlock(nn.Module):
         return self.act(x + self.c2(self.c1(x)))
 
 
-class Net(nn.Module):
+class FCNet(nn.Module):
     """
     Fully convolutional face detector.
     - Trained on 36x36 crops -> output is 1x1 (one logit).
@@ -73,6 +74,25 @@ class Net(nn.Module):
         logit = self.cls(window)
         return logit
 
+
+class Net(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Conv2d(1, 6, 5)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(6, 16, 5)
+        self.fc1 = nn.Linear(16 * 6 * 6, 32)
+        self.fc2 = nn.Linear(32, 16)
+        self.fc3 = nn.Linear(16, 2)
+
+    def forward(self, x):
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = x.view(-1, 16 * 6 * 6)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
 
 # %% Load Model
 def load_model(path: str) -> Net:
