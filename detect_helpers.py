@@ -78,19 +78,23 @@ def ask_model_batch(
     ]
 
 
-def filter_by_support(boxes, certainty_filter: float, min_neighbors=2, iou_thresh=0.2):
+def filter_by_certainty(boxes, certainty_filter: float):
+    if certainty_filter == 0:
+        return list(boxes)
+    return [b for b in boxes if b.certainty >= certainty_filter]
+
+
+def filter_by_neighbors(boxes, min_neighbors=2, iou_thresh=0.2):
     if not boxes:
         return []
+    if min_neighbors == 0:
+        return list(boxes)
     t = torch.tensor(
         [[b.x, b.y, b.x + b.size, b.y + b.size] for b in boxes], dtype=torch.float32
     )
     iou = torchvision.ops.box_iou(t, t)
     counts = (iou > iou_thresh).sum(dim=1) - 1  # exclude self
-    return [
-        b
-        for b, c in zip(boxes, counts.tolist())
-        if b.certainty >= certainty_filter and c >= min_neighbors
-    ]
+    return [b for b, c in zip(boxes, counts.tolist()) if c >= min_neighbors]
 
 
 def scale_back(results: list[ModelResult]) -> list[BorderBox]:

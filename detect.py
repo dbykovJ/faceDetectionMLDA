@@ -10,13 +10,12 @@ from detect_helpers import (
     ask_model_batch,
     downscale,
     draw_boxes,
-    filter_by_support,
+    filter_by_certainty,
+    filter_by_neighbors,
     merge_overlapping_boxes,
     scale_back,
 )
 from model import RETINA_SIZE, BorderBox, ModelResult
-from net import Net, load_model
-
 
 
 class Detect:
@@ -48,6 +47,7 @@ class Detect:
         self.step_size = step_size
         self.scaling_sizes = scaling_sizes
         self.certainty_filter = certainty_filter
+        self.knn = knn
         self.net = net
 
     def _resize_image(self, image: Image.Image):
@@ -91,15 +91,20 @@ class Detect:
 
         boxes: list[BorderBox] = scale_back(results)
 
-        boxes_by_support = filter_by_support(
-            boxes,
-            certainty_filter=self.certainty_filter,
-            min_neighbors=2,
+        draw_boxes(img.copy(), boxes).save("before_filtering.jpg")
+
+        boxes_by_certainty = filter_by_certainty(boxes, self.certainty_filter)
+
+        draw_boxes(img.copy(), boxes_by_certainty).save("after_certainty.jpg")
+        boxes_by_neighbors = filter_by_neighbors(
+            boxes_by_certainty,
+            min_neighbors=self.knn,
             iou_thresh=0.2,
         )
+        draw_boxes(img.copy(), boxes_by_neighbors).save("after_neighbors.jpg")
 
         merged_boxes: list[BorderBox] = merge_overlapping_boxes(
-            boxes_by_support, iou_threshold=0.1
+            boxes_by_neighbors, iou_threshold=0.1
         )
 
         return draw_boxes(img, merged_boxes)
