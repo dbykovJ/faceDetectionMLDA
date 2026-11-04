@@ -139,13 +139,19 @@ def merge_overlapping_boxes(
     return [original_boxes[i] for i in res.tolist()]
 
 
-def draw_boxes(image: Image.Image, boxes: list[BorderBox]) -> Image.Image:
+def draw_boxes(
+    image: Image.Image, boxes: list[BorderBox], thickness: int = 2
+) -> Image.Image:
+    if thickness < 1:
+        raise ValueError("Box thickness must be at least 1")
     image = image.copy()
     draw = ImageDraw.Draw(image)
 
     for box in boxes:
         draw.rectangle(
-            [box.x, box.y, box.x + box.size, box.y + box.size], outline="green", width=2
+            [box.x, box.y, box.x + box.size, box.y + box.size],
+            outline="green",
+            width=thickness,
         )
 
     return image

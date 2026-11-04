@@ -33,6 +33,7 @@ class Detect:
     DEFAULT_SIZE = 1024
     DEFAULT_CERTAINTY = 0.95
     DEFAULT_KNN = 2
+    DEFAULT_THICKNESS = 2
 
     def __init__(
         self,
@@ -42,7 +43,13 @@ class Detect:
         scaling_sizes: tuple[float, ...] = DEFAULT_SCALING_SIZES,
         certainty_filter: float = DEFAULT_CERTAINTY,
         knn: int = DEFAULT_KNN,
+        thickness: int = DEFAULT_THICKNESS,
+        debug: bool = False,
     ):
+        if thickness < 1:
+            raise ValueError("Box thickness must be at least 1")
+        self.thickness = thickness
+        self.debug = debug
         self.input_max_side = input_max_side
         self.step_size = step_size
         self.scaling_sizes = scaling_sizes
@@ -91,23 +98,26 @@ class Detect:
 
         boxes: list[BorderBox] = scale_back(results)
 
-        draw_boxes(img.copy(), boxes).save("before_filtering.jpg")
+        if self.debug:
+            draw_boxes(img, boxes, self.thickness).save("before_filtering.jpg")
 
         boxes_by_certainty = filter_by_certainty(boxes, self.certainty_filter)
 
-        draw_boxes(img.copy(), boxes_by_certainty).save("after_certainty.jpg")
+        if self.debug:
+            draw_boxes(img, boxes_by_certainty, self.thickness).save("after_certainty.jpg")
         boxes_by_neighbors = filter_by_neighbors(
             boxes_by_certainty,
             min_neighbors=self.knn,
             iou_thresh=0.2,
         )
-        draw_boxes(img.copy(), boxes_by_neighbors).save("after_neighbors.jpg")
+        if self.debug:
+            draw_boxes(img, boxes_by_neighbors, self.thickness).save("after_neighbors.jpg")
 
         merged_boxes: list[BorderBox] = merge_overlapping_boxes(
             boxes_by_neighbors, iou_threshold=0.1
         )
 
-        return draw_boxes(img, merged_boxes)
+        return draw_boxes(img, merged_boxes, self.thickness)
 
 
 # TODO - recreate images predicted from the plain sliding window approach (without knn filtering) {also show the boxes

@@ -26,6 +26,8 @@ def main():
         scaling_sizes=args.scales,
         certainty_filter=args.certainty,
         knn=args.knn,
+        thickness=args.thickness,
+        debug=args.debug,
     )
     exts = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
@@ -64,6 +66,13 @@ def load_net(name: str, weights: str):
     return net
 
 
+def positive_int(value: str) -> int:
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return number
+
+
 def parser():
 
     parser = argparse.ArgumentParser(
@@ -80,6 +89,14 @@ def parser():
         "-c", "--certainty", type=float, default=Detect.DEFAULT_CERTAINTY
     )
     parser.add_argument("--knn", type=int, default=Detect.DEFAULT_KNN)
+    parser.add_argument(
+        "--thickness", type=positive_int, default=Detect.DEFAULT_THICKNESS,
+        help="bounding box outline thickness in pixels (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--debug", action="store_true",
+        help="save intermediate images before filtering and after each filter",
+    )
     parser.add_argument("-s", "--step", type=int, default=Detect.DEFAULT_STEP)
     parser.add_argument("--size", type=int, default=Detect.DEFAULT_SIZE)
     parser.add_argument(
