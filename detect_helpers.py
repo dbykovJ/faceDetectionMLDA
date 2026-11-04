@@ -85,9 +85,7 @@ def filter_by_certainty(boxes, certainty_filter: float):
 
 
 def filter_by_neighbors(boxes, min_neighbors=2, iou_thresh=0.2):
-    if not boxes:
-        return []
-    if min_neighbors == 0:
+    if not boxes or min_neighbors == 0:
         return list(boxes)
     t = torch.tensor(
         [[b.x, b.y, b.x + b.size, b.y + b.size] for b in boxes], dtype=torch.float32
