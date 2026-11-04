@@ -4,6 +4,7 @@ from torch import nn
 
 
 def conv_bn(in_ch, out_ch, k=3, p=1):
+    """Sequential block of a convolution, batch normalization, and ReLU activation."""
     return nn.Sequential(
         nn.Conv2d(in_ch, out_ch, k, padding=p, bias=False),
         nn.BatchNorm2d(out_ch),
