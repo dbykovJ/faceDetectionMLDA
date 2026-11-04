@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from time import perf_counter
 
 import torch
 from PIL import Image
@@ -75,20 +76,39 @@ class Detect:
         return target_image
 
     def detect_faces(self, image_path: Path, batch_size=250):
-
+        started = perf_counter()
         img = Image.open(image_path)
+        original_size = img.size
         img = self._resize_image(img)
+        device = next(self.net.parameters()).device
+        print(
+            f"Detecting {image_path}: {original_size[0]}x{original_size[1]} -> "
+            f"{img.width}x{img.height}, device={device}, window={RETINA_SIZE}x{RETINA_SIZE}",
+            flush=True,
+        )
 
         img_tensor = self._to_normalized_tensor(img)
 
         results: list[ModelResult] = []
-        for downscaled in downscale(img_tensor, self.scaling_sizes):
-            downscaled.image = downscaled.image.to(next(self.net.parameters()).device)
+        total_windows = 0
+        for index, downscaled in enumerate(downscale(img_tensor, self.scaling_sizes), 1):
+            downscaled.image = downscaled.image.to(device)
             scaled_step = max(1, round(self.step_size * downscaled.scale))
+            x_positions = range(0, downscaled.width - RETINA_SIZE + 1, scaled_step)
+            y_positions = range(0, downscaled.height - RETINA_SIZE + 1, scaled_step)
+            window_count = len(x_positions) * len(y_positions)
+            total_windows += window_count
+            print(
+                f"  Scale {index}/{len(self.scaling_sizes)} ({downscaled.scale:.4g}): "
+                f"{downscaled.width}x{downscaled.height}, stride={scaled_step}, "
+                f"{window_count:,} windows to check"
+                + (" (image smaller than detection window; skipped)" if not window_count else ""),
+                flush=True,
+            )
             positions: list[tuple[int, int]] = []
 
-            for xstep in range(0, downscaled.width - RETINA_SIZE + 1, scaled_step):
-                for ystep in range(0, downscaled.height - RETINA_SIZE + 1, scaled_step):
+            for xstep in x_positions:
+                for ystep in y_positions:
                     positions.append((xstep, ystep))
                     if len(positions) == batch_size:
                         results.extend(ask_model_batch(downscaled, positions, self.net))
@@ -115,6 +135,14 @@ class Detect:
 
         merged_boxes: list[BorderBox] = merge_overlapping_boxes(
             boxes_by_neighbors, iou_threshold=0.1
+        )
+        print(
+            f"  Checked {total_windows:,} windows: {len(boxes):,} candidates -> "
+            f"{len(boxes_by_certainty):,} after certainty "
+            f"({self.certainty_filter:g}) -> {len(boxes_by_neighbors):,} after neighbors "
+            f"(minimum {self.knn}) -> {len(merged_boxes):,} final boxes. "
+            f"Elapsed: {perf_counter() - started:.2f}s",
+            flush=True,
         )
 
         return draw_boxes(img, merged_boxes, self.thickness)
